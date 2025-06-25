@@ -1,0 +1,733 @@
+import tkinter as tk
+from tkinter import messagebox, simpledialog, ttk
+import json
+import os
+import datetime
+import shutil
+from docx import Document
+SETTINGS_FILE = "settings.json"
+REPORTS_DIR = "reports"
+# إعداد ألوان الوضعين
+LIGHT_BG = "#f8f5f1"
+DARK_BG = "#23272e"
+LIGHT_FG = "#222"
+DARK_FG = "#f5f6fa"
+ACCENT = "#40739e"
+
+# تحميل الإعدادات
+def load_settings():
+    if os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    else:
+        return None
+
+# حفظ الإعدادات
+def save_settings(settings):
+    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(settings, f, indent=4, ensure_ascii=False)
+
+# إنشاء مجلد التقارير
+os.makedirs(REPORTS_DIR, exist_ok=True)
+
+# نسخ الأيقونة تلقائياً إذا لم تكن موجودة في مجلد التشغيل
+ICON_SRC = os.path.join("assets", "falih_logo.ico")
+ICON_DST = os.path.join(os.getcwd(), "falih_logo.ico")
+if not os.path.exists(ICON_DST) and os.path.exists(ICON_SRC):
+    try:
+        shutil.copy(ICON_SRC, ICON_DST)
+    except Exception as e:
+        print(f"تعذر نسخ الأيقونة: {e}")
+
+# نافذة البرنامج الرئيسية
+class Fale7App:
+    def __init__(self, root):
+        self.root = root
+        self.is_dark = False
+        self.logo_img = None
+        self.root.title("برنامج فالح أبو العنبة")
+        self.root.geometry("700x600")
+        self.center_window(self.root, 700, 600)
+        self.set_theme()
+        try:
+            self.root.iconbitmap("falih_logo.ico")
+        except:
+            pass
+        self.style = ttk.Style()
+        if "clam" in self.style.theme_names():
+            self.style.theme_use("clam")
+        self.style.configure("TButton", font=("Cairo", 13, "bold"), padding=8)
+        self.style.configure("TLabel", font=("Cairo", 13))
+        self.settings = load_settings()
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        if not self.settings:
+            self.first_time_setup()
+        else:
+            self.build_main_menu()
+
+    def center_window(self, win, w, h):
+        ws = win.winfo_screenwidth()
+        hs = win.winfo_screenheight()
+        x = int((ws/2) - (w/2))
+        y = int((hs/2) - (h/2))
+        win.geometry(f'{w}x{h}+{x}+{y}')
+
+    def first_time_setup(self):
+        password = simpledialog.askstring("إعداد أول مرة", "قم بتعيين كلمة مرور لإعدادات البرنامج:", show='*')
+        if not password:
+            messagebox.showerror("خطأ", "يجب تعيين كلمة مرور.")
+            self.root.destroy()
+            return
+        self.settings = {
+            "password": password,
+            "day_shift": 2000,
+            "night_shift": 3000,
+            "enable_wage": True  # تفعيل اليوميات افتراضيًا
+        }
+        save_settings(self.settings)
+        messagebox.showinfo("تم", "تم حفظ الإعدادات.")
+        self.build_main_menu()
+
+    def set_theme(self):
+        bg = DARK_BG if self.is_dark else LIGHT_BG
+        fg = DARK_FG if self.is_dark else LIGHT_FG
+        self.root.configure(bg=bg)
+        self.root.option_add("*Font", "Cairo 13")
+        self.root.option_add("*Background", bg)
+        self.root.option_add("*Foreground", fg)
+
+    def toggle_theme(self):
+        self.is_dark = not self.is_dark
+        self.set_theme()
+        self.build_main_menu()
+
+    def on_close(self):
+        if hasattr(self, 'unsaved') and self.unsaved:
+            if messagebox.askyesno("حفظ قبل الخروج", "هل تريد حفظ البيانات قبل الخروج؟"):
+                self.save_report_func()  # سيتم تعريفها لاحقًا
+        self.root.destroy()
+
+    def build_main_menu(self):
+        # إزالة الشريط الجانبي، وضع اللوجو أعلى النافذة فقط
+        for widget in self.root.winfo_children():
+            widget.destroy()
+        BG = "#fff"
+        ACCENT = "#4078c0"
+        BTN_BG = ACCENT
+        BTN_HOVER = "#22577a"
+        BTN_FG = "#fff"
+        frame = tk.Frame(self.root, bg=BG)
+        frame.pack(expand=True, fill="both")
+        frame.grid_columnconfigure(0, weight=1)
+        logo_path = "assets/falih_logo.ico"
+        if os.path.exists(logo_path):
+            try:
+                self.logo_img = tk.PhotoImage(file=logo_path)
+                logo_label = tk.Label(frame, image=self.logo_img, bg=BG)
+                logo_label.grid(row=0, column=0, pady=(30, 10))
+            except Exception as e:
+                logo_label = tk.Label(frame, text="فـالـح أبو العنبة", font=("Cairo", 22, "bold"), fg=ACCENT, bg=BG)
+                logo_label.grid(row=0, column=0, pady=(30, 10))
+        else:
+            logo_label = tk.Label(frame, text="فـالـح أبو العنبة", font=("Cairo", 22, "bold"), fg=ACCENT, bg=BG)
+            logo_label.grid(row=0, column=0, pady=(30, 10))
+        title = tk.Label(frame, text="مرحبًا بك في برنامج فالح لحسابات المطعم", font=("Cairo", 17, "bold"), fg="#222", bg=BG)
+        title.grid(row=1, column=0, pady=(0, 18))
+        def make_btn(txt, cmd):
+            btn = tk.Button(frame, text=txt, font=("Cairo", 14, "bold"), bg=BTN_BG, fg=BTN_FG, activebackground=BTN_HOVER, activeforeground=BTN_FG, bd=0, relief="flat", cursor="hand2", command=cmd)
+            btn.grid(sticky="ew", padx=60, pady=7)
+            btn.bind("<Enter>", lambda e: btn.config(bg=BTN_HOVER))
+            btn.bind("<Leave>", lambda e: btn.config(bg=BTN_BG))
+            return btn
+        make_btn("شاشة الوردية اليومية", self.open_daily_screen)
+        make_btn("إعدادات (محمية)", self.open_settings)
+        make_btn("عرض التقارير المحفوظة", self.view_reports)
+        make_btn("خروج", self.root.quit)
+        try:
+            self.root.iconbitmap("falih_logo.ico")
+        except:
+            pass
+
+    def open_settings(self):
+        # طلب كلمة المرور قبل فتح الإعدادات
+        password = simpledialog.askstring("كلمة المرور مطلوبة", "أدخل كلمة المرور:", show='*')
+        if password != self.settings.get("password"):
+            messagebox.showerror("خطأ", "كلمة المرور غير صحيحة.")
+            return
+        if hasattr(self, '_settings_win') and self._settings_win.winfo_exists():
+            self._settings_win.lift()
+            return
+        BG = "#fff"
+        ACCENT = "#4078c0"
+        BTN_BG = ACCENT
+        BTN_HOVER = "#22577a"
+        BTN_FG = "#fff"
+        settings_win = tk.Toplevel(self.root)
+        self._settings_win = settings_win
+        settings_win.title("إعدادات البرنامج")
+        self.center_window(settings_win, 500, 400)
+        settings_win.configure(bg=BG)
+        settings_win.grab_set()
+        try:
+            settings_win.iconbitmap("falih_logo.ico")
+        except:
+            pass
+        logo_path = "assets/logo.png"
+        if os.path.exists(logo_path):
+            logo_img = tk.PhotoImage(file=logo_path)
+            logo_label = tk.Label(settings_win, image=logo_img, bg=BG)
+            logo_label.image = logo_img
+            logo_label.pack(pady=(30, 10))
+        else:
+            logo_label = tk.Label(settings_win, text="الإعدادات", font=("Cairo", 16, "bold"), fg=ACCENT, bg=BG)
+            logo_label.pack(pady=(30, 10))
+        # محتوى رئيسي مع تمرير سلس + شريط تمرير مرئي
+        content = tk.Frame(settings_win, bg=BG)
+        content.pack(fill="both", expand=True)
+        canvas = tk.Canvas(content, bg=BG, highlightthickness=0)
+        canvas.pack(side="left", fill="both", expand=True)
+        # No scrollbar
+        # Inner frame inside canvas
+        inner = tk.Frame(canvas, bg=BG)
+        window_id = canvas.create_window((0,0), window=inner, anchor="nw")
+        def _on_frame_configure(event=None):
+            # Always set scrollregion to full content
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            # Make inner frame width always match canvas width (prevents shrink)
+            canvas_width = canvas.winfo_width()
+            inner.update_idletasks()
+            inner_width = inner.winfo_reqwidth()
+            if inner_width < canvas_width:
+                canvas.itemconfig(window_id, width=canvas_width)
+            else:
+                canvas.itemconfig(window_id, width=inner_width)
+        inner.bind('<Configure>', _on_frame_configure)
+        canvas.bind('<Configure>', _on_frame_configure)
+        # Mouse/touchpad scrolling only when mouse is over canvas
+        def _on_mousewheel(event):
+            # Only scroll if mouse is over the canvas
+            x, y = canvas.winfo_pointerxy()
+            widget_under_mouse = canvas.winfo_containing(x, y)
+            if widget_under_mouse is None:
+                return
+            # Accept scroll if mouse is over canvas or any child of canvas
+            parent = widget_under_mouse
+            while parent is not None:
+                if parent == canvas:
+                    break
+                parent = parent.master
+            else:
+                return  # Mouse is not over canvas or its children
+            if event.delta:
+                # Windows/Mac
+                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            elif event.num == 4:
+                # Linux scroll up
+                canvas.yview_scroll(-1, "units")
+            elif event.num == 5:
+                # Linux scroll down
+                canvas.yview_scroll(1, "units")
+
+        def _bind_scroll_events():
+            canvas.bind_all('<MouseWheel>', _on_mousewheel)
+            canvas.bind_all('<Button-4>', _on_mousewheel)
+            canvas.bind_all('<Button-5>', _on_mousewheel)
+
+        def _unbind_scroll_events():
+            canvas.unbind_all('<MouseWheel>')
+            canvas.unbind_all('<Button-4>')
+            canvas.unbind_all('<Button-5>')
+
+        canvas.bind('<Enter>', lambda e: (_bind_scroll_events(), canvas.focus_set()))
+        canvas.bind('<Leave>', lambda e: _unbind_scroll_events())
+        # مدخلات عصرية
+        def make_entry(lbl, val, show=None):
+            l = tk.Label(inner, text=lbl, bg=BG, font=("Cairo", 12, "bold"), fg="#222")
+            l.pack(pady=(7,0))
+            e = tk.Entry(inner, font=("Cairo", 12), show=show, bg="#f8fafc", fg="#222", bd=0, highlightthickness=1, highlightbackground="#e0e0e0", relief="flat")
+            e.insert(0, str(val))
+            e.pack(pady=(0,7), ipadx=6, ipady=4)
+            return e
+        day_entry = make_entry("يوميات عمال وردية الصباح", self.settings["day_shift"])
+        night_entry = make_entry("يوميات عمال وردية الليل", self.settings["night_shift"])
+        pass_entry = make_entry("تغيير كلمة المرور", "", show="*")
+        # Checkbutton لتفعيل/إلغاء اليوميات
+        enable_wage_var = tk.BooleanVar(value=self.settings.get("enable_wage", True))
+        def toggle_wage():
+            pass  # placeholder for future logic if needed
+        wage_chk = tk.Checkbutton(inner, text="تفعيل خصم اليوميات من الحساب", variable=enable_wage_var, bg=BG, font=("Cairo", 12), fg="#222", selectcolor="#e0e0e0", command=toggle_wage, anchor="w")
+        wage_chk.pack(pady=(5, 10), ipadx=4, anchor="center")
+        def save():
+            try:
+                self.settings["day_shift"] = int(day_entry.get())
+                self.settings["night_shift"] = int(night_entry.get())
+                self.settings["enable_wage"] = enable_wage_var.get()
+                if pass_entry.get():
+                    self.settings["password"] = pass_entry.get()
+                save_settings(self.settings)
+                messagebox.showinfo("تم", "تم حفظ الإعدادات بنجاح.")
+                settings_win.destroy()
+            except:
+                messagebox.showerror("خطأ", "تأكد من أن القيم المدخلة صحيحة.")
+        save_btn = tk.Button(inner, text="حفظ", font=("Cairo", 13, "bold"), bg=BTN_BG, fg=BTN_FG, activebackground=BTN_HOVER, activeforeground=BTN_FG, bd=0, relief="flat", command=save, cursor="hand2")
+        save_btn.pack(pady=15, ipadx=10, ipady=3, anchor="center")
+        save_btn.bind("<Enter>", lambda e: save_btn.config(bg=BTN_HOVER))
+        save_btn.bind("<Leave>", lambda e: save_btn.config(bg=BTN_BG))
+
+    def open_daily_screen(self):
+        if hasattr(self, '_daily_win') and self._daily_win.winfo_exists():
+            self._daily_win.lift()
+            return
+        BG = "#fff"
+        ACCENT = "#4078c0"
+        BTN_BG = ACCENT
+        BTN_HOVER = "#22577a"
+        BTN_FG = "#fff"
+        daily_win = tk.Toplevel(self.root)
+        self._daily_win = daily_win
+        daily_win.title("الوردية اليومية")
+        self.center_window(daily_win, 800, 650)
+        daily_win.configure(bg=BG)
+        daily_win.grab_set()
+        try:
+            daily_win.iconbitmap("falih_logo.ico")
+        except:
+            pass
+        logo_path = "assets/logo.png"
+        if os.path.exists(logo_path):
+            logo_img = tk.PhotoImage(file=logo_path)
+            logo_label = tk.Label(daily_win, image=logo_img, bg=BG)
+            logo_label.image = logo_img
+            logo_label.pack(pady=(30, 10))
+        else:
+            logo_label = tk.Label(daily_win, text="الوردية اليومية", font=("Cairo", 16, "bold"), fg=ACCENT, bg=BG)
+            logo_label.pack(pady=(30, 10))
+        # محتوى رئيسي مع تمرير سلس + شريط تمرير مرئي
+        content = tk.Frame(daily_win, bg=BG)
+        content.pack(fill="both", expand=True)
+        # --- Scrollable Canvas Setup ---
+        canvas = tk.Canvas(content, bg=BG, highlightthickness=0)
+        canvas.pack(side="left", fill="both", expand=True)
+        # No scrollbar
+        # Inner frame inside canvas
+        inner = tk.Frame(canvas, bg=BG)
+        window_id = canvas.create_window((0,0), window=inner, anchor="nw")
+        def _on_frame_configure(event=None):
+            # Always set scrollregion to full content
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            # Make inner frame width always match canvas width (prevents shrink)
+            canvas_width = canvas.winfo_width()
+            inner.update_idletasks()
+            inner_width = inner.winfo_reqwidth()
+            if inner_width < canvas_width:
+                canvas.itemconfig(window_id, width=canvas_width)
+            else:
+                canvas.itemconfig(window_id, width=inner_width)
+        inner.bind('<Configure>', _on_frame_configure)
+        canvas.bind('<Configure>', _on_frame_configure)
+
+        # --- Improved Mouse/Touchpad Scrolling ---
+        def _on_mousewheel(event):
+            # Only scroll if mouse is over the canvas
+            x, y = canvas.winfo_pointerxy()
+            widget_under_mouse = canvas.winfo_containing(x, y)
+            if widget_under_mouse is None:
+                return
+            # Accept scroll if mouse is over canvas or any child of canvas
+            parent = widget_under_mouse
+            while parent is not None:
+                if parent == canvas:
+                    break
+                parent = parent.master
+            else:
+                return  # Mouse is not over canvas or its children
+            if event.delta:
+                # Windows/Mac
+                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            elif event.num == 4:
+                # Linux scroll up
+                canvas.yview_scroll(-1, "units")
+            elif event.num == 5:
+                # Linux scroll down
+                canvas.yview_scroll(1, "units")
+
+        def _bind_scroll_events():
+            canvas.bind_all('<MouseWheel>', _on_mousewheel)
+            canvas.bind_all('<Button-4>', _on_mousewheel)
+            canvas.bind_all('<Button-5>', _on_mousewheel)
+
+        def _unbind_scroll_events():
+            canvas.unbind_all('<MouseWheel>')
+            canvas.unbind_all('<Button-4>')
+            canvas.unbind_all('<Button-5>')
+
+        canvas.bind('<Enter>', lambda e: (_bind_scroll_events(), canvas.focus_set()))
+        canvas.bind('<Leave>', lambda e: _unbind_scroll_events())
+
+        # إطار مركزي في يسار الشاشة (now inside inner)
+        center_width = 370  # عرض موحد لجميع العناصر
+        center_frame = tk.Frame(inner, bg=BG, width=center_width)
+        center_frame.pack(pady=20)
+        # Center the inner frame horizontally in the canvas
+        def _center_inner(event=None):
+            canvas.update_idletasks()
+            canvas_width = canvas.winfo_width()
+            inner_width = inner.winfo_reqwidth()
+            x = max((canvas_width - inner_width) // 2, 0)
+            canvas.coords(1, x, 0)  # 1 is the default window id
+        canvas.bind('<Configure>', _center_inner)
+        inner.bind('<Configure>', _center_inner)
+
+        # --- عناصر الشاشة ---
+        # العنوان (اللوجو تم وضعه مسبقًا)
+        # اختيار الوردية
+        # --- Style for Combobox to fix text color issue ---
+        style = ttk.Style()
+        style.theme_use('default')
+        style.configure("Custom.TCombobox",
+            foreground="#222",
+            background="#f8fafc",
+            fieldbackground="#f8fafc",
+            selectforeground="#222",
+            selectbackground="#f8fafc",
+            borderwidth=1
+        )
+        style.map("Custom.TCombobox",
+            foreground=[
+                ('readonly', '#222'),
+                ('!disabled', '#222'),
+                ('active', '#222'),
+                ('focus', '#222'),
+                ('selected', '#222'),
+                ('!selected', '#222')
+            ],
+            fieldbackground=[
+                ('readonly', '#f8fafc'),
+                ('!disabled', '#f8fafc'),
+                ('active', '#f8fafc'),
+                ('focus', '#f8fafc'),
+                ('selected', '#f8fafc')
+            ],
+            background=[
+                ('readonly', '#f8fafc'),
+                ('!disabled', '#f8fafc'),
+                ('active', '#f8fafc'),
+                ('focus', '#f8fafc'),
+                ('selected', '#f8fafc')
+            ]
+        )
+        shift_var = tk.StringVar(value="صباح")
+        shift_label = tk.Label(center_frame, text="اختر الوردية:", font=("Cairo", 12, "bold"), bg=BG, fg="#222", anchor="center")
+        shift_label.pack(pady=(0, 4), fill="x", padx=10)
+        shift_combo = ttk.Combobox(center_frame, textvariable=shift_var, values=["صباح", "ليل"], state="readonly", font=("Cairo", 13), width=28, justify="center", style="Custom.TCombobox")
+        shift_combo.pack(pady=(0, 16), fill="x", padx=10)
+
+        # إدخال المبيعات
+        sales_entry = PlaceholderEntry(center_frame, placeholder="أدخل إجمالي المبيعات", font=("Cairo", 12), justify="center", bg="#f8fafc", fg="#222", bd=0, highlightthickness=1, highlightbackground="#e0e0e0", relief="flat")
+        sales_entry.pack(pady=(0,12), fill="x", padx=10)
+        def validate_sales(P):
+            return P == "" or P.isdigit() or P == sales_entry.placeholder
+        vcmd_sales = (daily_win.register(validate_sales), '%P')
+        sales_entry.config(validate="key", validatecommand=vcmd_sales)
+
+        # المصروفات
+        expenses = []
+        expenses_frame = tk.LabelFrame(center_frame, text="المصروفات", bg=BG, font=("Cairo", 12, "bold"), fg=ACCENT, labelanchor="n", bd=0, highlightthickness=1, highlightbackground=ACCENT)
+        expenses_frame.pack(pady=(0,12), fill="x", padx=10)
+        def add_expense_row(focus=False):
+            row = tk.Frame(expenses_frame, bg=BG)
+            row.pack(pady=2, fill="x")
+            amount = PlaceholderEntry(row, placeholder="المبلغ", font=("Cairo", 12), justify="center", bg="#f8fafc", fg="#222", bd=0, highlightthickness=1, highlightbackground="#e0e0e0", relief="flat")
+            def validate_num(P):
+                return P == "" or P.isdigit() or P == amount.placeholder
+            vcmd = (daily_win.register(validate_num), '%P')
+            amount.config(validate="key", validatecommand=vcmd)
+            def on_tab(event):
+                if expenses and amount == expenses[-1][1]:
+                    add_expense_row(focus=True)
+                    return "break"
+                return None
+            amount.bind("<Tab>", on_tab)
+            amount.pack(side="left", fill="x", expand=True)
+            # --- Bind mousewheel to entry for scrolling ---
+            for ev in ('<MouseWheel>', '<Button-4>', '<Button-5>'):
+                amount.bind(ev, _on_mousewheel)
+            expenses.append((None, amount))
+            if focus:
+                amount.focus_set()
+        for _ in range(5):
+            add_expense_row()
+
+        # النتيجة
+        result_label = tk.Label(center_frame, text="صافي الربح = ؟", bg=BG, font=("Cairo", 14, "bold"), fg=ACCENT)
+        result_label.pack(pady=(10,8), fill="x", padx=10)
+
+        # زر احسب
+        def calculate():
+            try:
+                sales = float(sales_entry.get())
+                total_exp = sum(float(amount.get()) for _, amount in expenses if amount.get() and amount.get() != "المبلغ")
+                profit = sales - total_exp
+                shift_type = shift_var.get()
+                wage = self.settings["day_shift"] if shift_type == "صباح" else self.settings["night_shift"]
+                enable_wage = self.settings.get("enable_wage", True)
+                if enable_wage:
+                    net = profit - wage
+                    wage_text = f"صافي الربح قبل اليوميات: {profit} جنيه\nبعد خصم اليوميات: {net} جنيه"
+                else:
+                    net = profit
+                    wage_text = f"صافي الربح: {net} جنيه (اليوميات غير مفعلة)"
+                result_label.config(text=wage_text)
+                self.unsaved = True
+                return {
+                    "shift": shift_type,
+                    "sales": sales,
+                    "expenses": [{"amount": float(amount.get())} for _, amount in expenses if amount.get() and amount.get() != "المبلغ"],
+                    "total_expenses": total_exp,
+                    "wage": wage if enable_wage else 0,
+                    "profit_before": profit,
+                    "net_profit": net,
+                    "enable_wage": enable_wage
+                }
+            except:
+                messagebox.showerror("خطأ", "تأكد من صحة البيانات.")
+                return None
+        # Removed 'تغيير الوردية' button
+
+        # زر حفظ البيانات
+        def save_report():
+            data = calculate()
+            if not data:
+                return
+            default_name = f"{datetime.date.today()} - وردية {shift_var.get()}"
+            name = simpledialog.askstring("اسم التقرير", "أدخل اسم للتقرير:", initialvalue=default_name)
+            if not name:
+                return
+            try:
+                from docx import Document
+                from docx.shared import Pt
+                doc = Document()
+                doc.add_heading(f"تقرير وردية {data['shift']}", 0)
+                doc.add_paragraph(f"تاريخ التقرير: {datetime.date.today()}")
+                doc.add_paragraph(f"إجمالي المبيعات: {data['sales']}")
+                if data['enable_wage']:
+                    doc.add_paragraph(f"اليوميات: {data['wage']}")
+                else:
+                    doc.add_paragraph(f"اليوميات: غير مفعلة")
+                doc.add_paragraph(f"إجمالي المصروفات: {data['total_expenses']}")
+                if data['enable_wage']:
+                    doc.add_paragraph(f"صافي الربح قبل اليوميات: {data['profit_before']}")
+                    doc.add_paragraph(f"صافي الربح بعد اليوميات: {data['net_profit']}")
+                else:
+                    doc.add_paragraph(f"صافي الربح: {data['net_profit']} (اليوميات غير مفعلة)")
+                doc.add_heading("تفاصيل المصروفات", level=1)
+                table = doc.add_table(rows=1, cols=2)
+                hdr_cells = table.rows[0].cells
+                hdr_cells[0].text = 'المبلغ'
+                hdr_cells[1].text = 'م'
+                for i, exp in enumerate(data['expenses'], 1):
+                    row_cells = table.add_row().cells
+                    row_cells[0].text = str(exp['amount'])
+                    row_cells[1].text = str(i)
+                for row in table.rows:
+                    for cell in row.cells:
+                        for p in cell.paragraphs:
+                            for run in p.runs:
+                                run.font.size = Pt(13)
+                word_path = os.path.join(REPORTS_DIR, f"{name}.docx")
+                doc.save(word_path)
+            except Exception as e:
+                messagebox.showwarning("تحذير", f"تعذر حفظ ملف Word: {e}")
+            messagebox.showinfo("تم", "تم حفظ التقرير.")
+            self.unsaved = False
+        self.save_report_func = save_report
+
+        btn_calc = tk.Button(center_frame, text="احسب", font=("Cairo", 13, "bold"), bg=BTN_BG, fg=BTN_FG, activebackground=BTN_HOVER, activeforeground=BTN_FG, bd=0, relief="flat", command=calculate, cursor="hand2")
+        btn_calc.pack(pady=(0,6), fill="x", padx=10)
+        btn_calc.bind("<Enter>", lambda e: btn_calc.config(bg=BTN_HOVER))
+        btn_calc.bind("<Leave>", lambda e: btn_calc.config(bg=BTN_BG))
+
+        btn_save = tk.Button(center_frame, text="حفظ البيانات", font=("Cairo", 13, "bold"), bg=BTN_BG, fg=BTN_FG, activebackground=BTN_HOVER, activeforeground=BTN_FG, bd=0, relief="flat", command=save_report, cursor="hand2")
+        btn_save.pack(pady=(0,6), fill="x", padx=10)
+        btn_save.bind("<Enter>", lambda e: btn_save.config(bg=BTN_HOVER))
+        btn_save.bind("<Leave>", lambda e: btn_save.config(bg=BTN_BG))
+
+        # --- Helper: Bind scroll to all children ---
+        def bind_scroll_to_all_children(widget):
+            for ev in ('<MouseWheel>', '<Button-4>', '<Button-5>'):
+                widget.bind(ev, _on_mousewheel)
+            for child in widget.winfo_children():
+                bind_scroll_to_all_children(child)
+
+        # --- Bind scroll to all widgets in the scrollable area ---
+        bind_scroll_to_all_children(inner)
+
+    def view_reports(self):
+        if hasattr(self, '_reports_win') and self._reports_win.winfo_exists():
+            self._reports_win.lift()
+            return
+        reports_win = tk.Toplevel(self.root)
+        self._reports_win = reports_win
+        reports_win.title("التقارير المحفوظة")
+        self.center_window(reports_win, 800, 600)
+        reports_win.configure(bg="#f5f6fa")
+        reports_win.grab_set()
+        try:
+            reports_win.iconbitmap("falih_logo.ico")
+        except:
+            pass
+        BG = "#ffffff"
+        ACCENT = "#4078c0"
+        BTN_BG = ACCENT
+        BTN_HOVER = "#22577a"
+        BTN_FG = "#fff"
+        LIST_BG = "#f8fafc"
+        LIST_SEL = ACCENT
+        TXT_BG = "#f8fafc"
+        BORDER = "#e0e0e0"
+        logo_path = "assets/logo.png"
+        if os.path.exists(logo_path):
+            logo_img = tk.PhotoImage(file=logo_path)
+            logo_label = tk.Label(reports_win, image=logo_img, bg=BG)
+            logo_label.image = logo_img
+            logo_label.pack(pady=(30, 10))
+        else:
+            logo_label = tk.Label(reports_win, text="تقارير", font=("Cairo", 16, "bold"), fg=ACCENT, bg=BG)
+            logo_label.pack(pady=(30, 10))
+        # محتوى رئيسي مع تمرير سلس + شريط تمرير مرئي
+        content = tk.Frame(reports_win, bg=BG)
+        content.pack(fill="both", expand=True)
+        canvas = tk.Canvas(content, bg=BG, highlightthickness=0)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar = ttk.Scrollbar(content, orient="vertical", command=canvas.yview)
+        scrollbar.pack(side="right", fill="y")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        inner = tk.Frame(canvas, bg=BG)
+        canvas.create_window((0,0), window=inner, anchor="n")
+        def _on_frame_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        inner.bind("<Configure>", _on_frame_configure)
+        def _on_mousewheel(event):
+            if event.num == 5 or event.delta < 0:
+                canvas.yview_scroll(1, "units")
+            elif event.num == 4 or event.delta > 0:
+                canvas.yview_scroll(-1, "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        canvas.bind_all("<Button-4>", _on_mousewheel)
+        canvas.bind_all("<Button-5>", _on_mousewheel)
+        # إعداد الأعمدة للتمركز
+        inner.grid_columnconfigure(0, weight=1)
+        inner.grid_columnconfigure(1, weight=0)
+        inner.grid_columnconfigure(2, weight=1)
+        # قائمة الملفات
+        files = [f for f in os.listdir(REPORTS_DIR) if f.endswith(".docx")]
+        listbox = tk.Listbox(inner, width=40, font=("Cairo", 13), justify="right", bg=LIST_BG, fg="#222", bd=0, highlightthickness=0, relief="flat", selectbackground=LIST_SEL, selectforeground="#fff", activestyle="none")
+        listbox.grid(row=1, column=1, pady=(0,8), padx=(120,0), sticky="ew")
+        listbox.config(borderwidth=0, highlightbackground=BORDER, highlightcolor=BORDER)
+        for f in files:
+            listbox.insert(tk.END, f)
+
+        # مربع ملخص التقرير
+        text = tk.Text(inner, wrap=tk.WORD, font=("Cairo", 12), bg=TXT_BG, fg="#222", bd=0, highlightthickness=1, highlightbackground=BORDER, relief="flat", justify="right")
+        text.grid(row=2, column=1, pady=8, padx=(120,0), sticky="ew")
+        text.config(borderwidth=0, height=8)
+
+        def show_details(event):
+            selected = listbox.curselection()
+            if not selected:
+                return
+            filename = listbox.get(selected[0])
+            file_path = os.path.join(REPORTS_DIR, filename)
+            try:
+                doc = Document(file_path)
+                summary = ""
+                for para in doc.paragraphs[:7]:
+                    summary += para.text + "\n"
+                text.delete(1.0, tk.END)
+                text.insert(tk.END, summary.strip())
+                text.tag_configure('right', justify='right')
+                text.tag_add('right', '1.0', 'end')
+            except Exception as e:
+                text.delete(1.0, tk.END)
+                text.insert(tk.END, f"تعذر قراءة التقرير: {e}")
+                text.tag_configure('right', justify='right')
+                text.tag_add('right', '1.0', 'end')
+
+        listbox.bind("<<ListboxSelect>>", show_details)
+
+        def open_in_word(event=None):
+            selected = listbox.curselection()
+            if not selected:
+                return
+            filename = listbox.get(selected[0])
+            file_path = os.path.abspath(os.path.join(REPORTS_DIR, filename))
+            try:
+                os.startfile(file_path)
+            except Exception as e:
+                messagebox.showerror("خطأ", f"تعذر فتح الملف: {e}")
+
+        listbox.bind('<Double-Button-1>', open_in_word)
+
+        # زر عائم عصري
+        def on_enter(e):
+            open_btn.config(bg=BTN_HOVER)
+        def on_leave(e):
+            open_btn.config(bg=BTN_BG)
+        open_btn = tk.Button(inner, text="فتح في Word", font=("Cairo", 13, "bold"), bg=BTN_BG, fg=BTN_FG, activebackground=BTN_HOVER, activeforeground=BTN_FG, bd=0, relief="flat", command=open_in_word, cursor="hand2", anchor="e", justify="right")
+        open_btn.grid(row=3, column=1, pady=(8,18), padx=(120,0), sticky="ew")
+        open_btn.bind("<Enter>", on_enter)
+        open_btn.bind("<Leave>", on_leave)
+
+        # إزالة أي تأثيرات ازدحام بصري أو ألوان باهتة
+        # واجهة minimal بسيطة وعصرية
+
+        # إضافة دعم تمرير الماوس ولوحة اللمس بسلاسة عالية
+        def _smooth_scroll(event):
+            widget = event.widget
+            if hasattr(widget, 'yview_scroll'):
+                if event.num == 4 or event.delta > 0:
+                    widget.yview_scroll(-1, 'units')
+                elif event.num == 5 or event.delta < 0:
+                    widget.yview_scroll(1, 'units')
+        def _bind_smooth_scroll(widget):
+            widget.bind_all('<MouseWheel>', lambda e: _smooth_scroll(e), add='+')
+            widget.bind_all('<Button-4>', lambda e: _smooth_scroll(e), add='+')
+            widget.bind_all('<Button-5>', lambda e: _smooth_scroll(e), add='+')
+        # إذا كان لديك عناصر قابلة للتمرير مثل canvas أو text أو listbox في شاشة الوردية اليومية، طبق:
+        # _bind_smooth_scroll(content)
+        # _bind_smooth_scroll(main_frame)
+        # _bind_smooth_scroll(center_frame)
+        # إذا أضفت Scrollbar+Canvas في المستقبل، طبقها على الـcanvas
+        # تطبيق التمرير السلس على جميع إطارات التمرير عند إنشائها
+        # مثال: إذا كان لديك canvas أو text أو listbox مع شريط تمرير، طبق:
+        # _bind_smooth_scroll(canvas)
+        # _bind_smooth_scroll(text)
+        # _bind_smooth_scroll(listbox)
+        # تطبيق التمرير السلس على عناصر التمرير
+        _bind_smooth_scroll(canvas)
+        _bind_smooth_scroll(text)
+        _bind_smooth_scroll(listbox)
+
+class PlaceholderEntry(tk.Entry):
+    def __init__(self, master=None, placeholder="", color="#888", *args, **kwargs):
+        super().__init__(master, *args, **kwargs)
+        self.placeholder = placeholder
+        self.placeholder_color = color
+        self.default_fg_color = self["fg"]
+        self.bind("<FocusIn>", self._clear_placeholder)
+        self.bind("<FocusOut>", self._add_placeholder)
+        self._add_placeholder()
+    def _clear_placeholder(self, event=None):
+        if self.get() == self.placeholder and self["fg"] == self.placeholder_color:
+            self.delete(0, tk.END)
+            self.config(fg=self.default_fg_color)
+    def _add_placeholder(self, event=None):
+        if not self.get():
+            self.insert(0, self.placeholder)
+            self.config(fg=self.placeholder_color)
+
+# تشغيل البرنامج
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = Fale7App(root)
+    root.mainloop()
